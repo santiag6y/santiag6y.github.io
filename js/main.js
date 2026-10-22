@@ -21,8 +21,8 @@ let listaDePlanes = JSON.parse(localStorage.getItem("planesJuntos")) || [
 // Las imágenes se guardan en Cloudinary y la LISTA de fotos en una base de datos
 // gratuita (Supabase), así se ven iguales en cualquier celular o PC y se pueden borrar.
 // Pega aquí los datos de tu proyecto de Supabase (ver LEEME-SUPABASE.md):
-const SUPABASE_URL = "https://supabase.com/dashboard/project/ckttbjktidpelzpwlsxt/settings/api-keys";      // ej: https://abcdxyz.supabase.co
-const SUPABASE_KEY = "sb_publishable_XMXAsAPwIPaJJy_mrJEACg_TIKzm2VN";  // la clave "publishable" o "anon"
+const SUPABASE_URL = "https://hmxyitrkgxzgtvaqgkem.supabase.co";      // ej: https://abcdxyz.supabase.co
+const SUPABASE_KEY = "sb_publishable_TdhPtMfkYofaJ7mWpQFF2A_JJ_nAzBe";  // la clave "publishable" o "anon"
 
 let myWidget = null;
 
