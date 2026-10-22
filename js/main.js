@@ -24,6 +24,7 @@ let listaDePlanes = JSON.parse(localStorage.getItem("planesJuntos")) || [
 const SUPABASE_URL = "https://hmxyitrkgxzgtvaqgkem.supabase.co";      // ej: https://abcdxyz.supabase.co
 const SUPABASE_KEY = "sb_publishable_TdhPtMfkYofaJ7mWpQFF2A_JJ_nAzBe";  // la clave "publishable" o "anon"
 
+
 let myWidget = null;
 
 function supabaseConfigurado() {
