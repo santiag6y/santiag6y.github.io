@@ -11,11 +11,9 @@ const uploadPreset = "fotos_juntos"; // <-- Pónselo cuando lo crees en Cloudina
 
 let albumActualClave = 'viajes';
 
-// PLANES
-let listaDePlanes = JSON.parse(localStorage.getItem("planesJuntos")) || [
-    { texto: "Viajar juntos a la playa 🏖️", completado: false },
-    { texto: "Tener una noche de películas y pizza 🍕", completado: true }
-];
+// PLANES (se guardan en Supabase, tabla "planes", para verse en todos los dispositivos)
+let listaDePlanes = [];
+let planesCargados = false;
 
 // FOTOS COMPARTIDAS
 // Las imágenes se guardan en Cloudinary y la LISTA de fotos en una base de datos
@@ -88,10 +86,9 @@ document.addEventListener("DOMContentLoaded", function() {
             const inputPlan = document.getElementById('input-plan');
             const textoPlan = inputPlan.value.trim();
 
-            if (textoPlan !== "") {
-                listaDePlanes.push({ texto: textoPlan, completado: false });
-                guardarYRenderizarPlanes();
+                       if (textoPlan !== "") {
                 inputPlan.value = "";
+                agregarPlan(textoPlan);
             }
         });
     }
@@ -141,7 +138,17 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }, 30000);
 
-    renderizarPlanes();
+        // Refrescar los planes al volver a la pestaña / app y cada 30 s si están abiertos
+    function planesVisibles() {
+        const m = document.getElementById('modulo-planes');
+        return !document.hidden && m && !m.classList.contains('oculto');
+    }
+    document.addEventListener("visibilitychange", function () {
+        if (planesVisibles()) cargarPlanes();
+    });
+    setInterval(function () { if (planesVisibles()) cargarPlanes(); }, 30000);
+
+    cargarPlanes();
     actualizarTextoFechaEspecial();
 });
 
@@ -162,6 +169,11 @@ function abrirModulo(nombreModulo) {
         const modulo = document.getElementById('modulo-fotos');
         if (modulo && menu) { menu.classList.add('oculto'); modulo.classList.remove('oculto'); }
     }
+        } else if (nombreModulo === 'planes') {
+        const modulo = document.getElementById('modulo-planes');
+        if (modulo && menu) { menu.classList.add('oculto'); modulo.classList.remove('oculto'); }
+        cargarPlanes();
+    } else if (nombreModulo === 'comienzo') {
 }
 
 function regresarAlMenu() {
@@ -298,38 +310,127 @@ function actualizarTextoFechaEspecial() {
     }
 }
 
+function mensajePlanes(texto) {
+    const cont = document.getElementById('lista-planes');
+    if (!cont) return;
+    cont.innerHTML = "";
+    const li = document.createElement('li');
+    li.className = 'msg-galeria';
+    li.textContent = texto;
+    cont.appendChild(li);
+}
+
+async function cargarPlanes() {
+    if (!supabaseConfigurado()) {
+        mensajePlanes("Falta configurar Supabase en js/main.js (mira LEEME-SUPABASE.md).");
+        return;
+    }
+    if (!planesCargados) mensajePlanes("Cargando planes…");
+    try {
+        const resp = await fetch(SUPABASE_URL + "/rest/v1/planes?select=*&order=created_at.asc,id.asc",
+            { headers: cabecerasDB() });
+        if (!resp.ok) {
+            let detalle = "";
+            try { detalle = (await resp.json()).message || ""; } catch (_) {}
+            throw new Error("HTTP " + resp.status + (detalle ? " - " + detalle : ""));
+        }
+        listaDePlanes = await resp.json();
+        planesCargados = true;
+        renderizarPlanes();
+    } catch (e) {
+        console.error("Supabase planes:", e);
+        if (!planesCargados) {
+            mensajePlanes("No se pudieron cargar los planes. ¿Ya ejecutaste supabase-planes.sql? Detalle: " + e.message);
+        }
+    }
+}
+
 function renderizarPlanes() {
     const contenedorLista = document.getElementById('lista-planes');
     if (!contenedorLista) return;
 
     contenedorLista.innerHTML = "";
-    listaDePlanes.forEach((plan, index) => {
+    if (listaDePlanes.length === 0) {
+        mensajePlanes("Aún no hay planes. ¡Agrega el primero! ✨");
+        return;
+    }
+    listaDePlanes.forEach(plan => {
         const li = document.createElement('li');
-        li.className = `item-plan ${plan.completado ? 'completado' : ''}`;
-        li.innerHTML = `
-            <span class="texto-plan">${plan.texto}</span>
-            <div class="acciones-plan">
-                <button class="btn-completar" onclick="togglePlan(${index})">${plan.completado ? '✅' : '✔'}</button>
-                <button class="btn-eliminar" onclick="eliminarPlan(${index})">🗑️</button>
-            </div>
-        `;
+        li.className = 'item-plan' + (plan.completado ? ' completado' : '');
+
+        const span = document.createElement('span');
+        span.className = 'texto-plan';
+        span.textContent = plan.texto;
+
+        const acciones = document.createElement('div');
+        acciones.className = 'acciones-plan';
+
+        const btnOk = document.createElement('button');
+        btnOk.className = 'btn-completar';
+        btnOk.textContent = plan.completado ? '✅' : '✔';
+        btnOk.addEventListener('click', () => togglePlan(plan.id));
+
+        const btnDel = document.createElement('button');
+        btnDel.className = 'btn-eliminar';
+        btnDel.textContent = '🗑️';
+        btnDel.addEventListener('click', () => eliminarPlan(plan.id));
+
+        acciones.appendChild(btnOk);
+        acciones.appendChild(btnDel);
+        li.appendChild(span);
+        li.appendChild(acciones);
         contenedorLista.appendChild(li);
     });
 }
 
-function togglePlan(index) {
-    listaDePlanes[index].completado = !listaDePlanes[index].completado;
-    guardarYRenderizarPlanes();
+async function agregarPlan(texto) {
+    if (!supabaseConfigurado()) { alert("Falta configurar Supabase en js/main.js."); return; }
+    try {
+        const resp = await fetch(SUPABASE_URL + "/rest/v1/planes", {
+            method: "POST",
+            headers: cabecerasDB({ "Prefer": "return=minimal" }),
+            body: JSON.stringify({ texto: texto, completado: false })
+        });
+        if (!resp.ok) throw new Error("No se pudo guardar el plan (" + resp.status + ")");
+        await cargarPlanes();
+    } catch (e) {
+        alert(e.message);
+        const inp = document.getElementById('input-plan');
+        if (inp && !inp.value) inp.value = texto;
+    }
 }
 
-function eliminarPlan(index) {
-    listaDePlanes.splice(index, 1);
-    guardarYRenderizarPlanes();
-}
-
-function guardarYRenderizarPlanes() {
-    localStorage.setItem("planesJuntos", JSON.stringify(listaDePlanes));
+async function togglePlan(id) {
+    const plan = listaDePlanes.find(p => p.id === id);
+    if (!plan) return;
+    const nuevo = !plan.completado;
+    plan.completado = nuevo;          // se ve al instante
     renderizarPlanes();
+    try {
+        const resp = await fetch(SUPABASE_URL + "/rest/v1/planes?id=eq." + encodeURIComponent(id), {
+            method: "PATCH",
+            headers: cabecerasDB({ "Prefer": "return=minimal" }),
+            body: JSON.stringify({ completado: nuevo })
+        });
+        if (!resp.ok) throw new Error("No se pudo actualizar (" + resp.status + ")");
+    } catch (e) {
+        alert(e.message);
+        cargarPlanes();
+    }
+}
+
+async function eliminarPlan(id) {
+    if (!confirm("¿Quieres eliminar este plan? Se borrará para los dos.")) return;
+    try {
+        const resp = await fetch(SUPABASE_URL + "/rest/v1/planes?id=eq." + encodeURIComponent(id), {
+            method: "DELETE",
+            headers: cabecerasDB()
+        });
+        if (!resp.ok) throw new Error("No se pudo borrar (" + resp.status + ")");
+        await cargarPlanes();
+    } catch (e) {
+        alert(e.message);
+    }
 }
 
 function actualizarContador() {
